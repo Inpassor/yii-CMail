@@ -1,4 +1,14 @@
 <?php
+/**
+ * CMail class file.
+ *
+ * Simple mailer
+ *
+ * @author Inpassor <inpassor@gmail.com>
+ * @link https://github.com/Inpassor/yii-EAssetManager
+ *
+ * @version 0.1 (2013.10.23)
+ */
 
 class CMail
 {
