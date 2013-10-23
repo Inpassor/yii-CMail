@@ -1,4 +1,14 @@
 <?php
+/**
+ * Common class file.
+ *
+ * Common methods.
+ *
+ * @author Inpassor <inpassor@gmail.com>
+ * @link https://github.com/Inpassor/yii-CMail
+ *
+ * @version 0.1 (2013.10.23)
+ */
 
 class Common
 {
