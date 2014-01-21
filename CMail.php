@@ -7,7 +7,7 @@
  * @author Inpassor <inpassor@gmail.com>
  * @link https://github.com/Inpassor/yii-CMail
  *
- * @version 0.1 (2013.10.23)
+ * @version 0.1.1 (2014.01.21)
  */
 
 class CMail
@@ -19,11 +19,13 @@ class CMail
 	public $to='';
 	public $subject='';
 	public $body='';
+	public $defaultCharset='utf-8';
 	public $charset='utf-8';
 	public $images=array();
 	public $attaches=array();
 	public $data=array();
 
+	private $_body=null;
 	private $_contentType=null;
 	private $_contentTypeBody=null;
 	private $_boundary=null;
@@ -96,40 +98,41 @@ class CMail
 		{
 			$this->mailer=Yii::app()->name.' '.Yii::app()->getModule('game')->version;
 		}
-		$this->viewPath=Common::getPath($this->viewPath,'application.views.mail');
+		$this->viewPath=CHelper::getPath($this->viewPath,'application.views.mail');
 		$this->charset=strtolower($this->charset);
 		if ($from)
 		{
 			$this->from=$from;
 		}
-		$this->from=$this->_encMail($this->from);
-		$this->replyTo=$this->_encMail($this->replyTo);
-		if ($this->replyTo===true)
-		{
-			$this->replyTo=$this->from;
-		}
 		if ($to)
 		{
 			$this->to=$to;
 		}
-		$this->to=$this->_encMail($this->to);
 		if ($subject)
 		{
 			$this->subject=$subject;
 		}
-		$this->subject=$this->_encMime($this->subject);
 		if ($body)
 		{
 			$this->body=$body;
 		}
 		if (file_exists($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->body.'.php'))
 		{
-			$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->body.'.php',$this->data,true);
+			$this->_body=$this->body;
 		}
 		elseif (file_exists($this->viewPath.DIRECTORY_SEPARATOR.$this->body.'.php'))
 		{
-			$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.$this->body.'.php',$this->data,true);
+			$this->_body=$this->body;
 		}
+		if (file_exists($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->_body.'.php'))
+		{
+			$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->_body.'.php',$this->data,true);
+		}
+		elseif (file_exists($this->viewPath.DIRECTORY_SEPARATOR.$this->_body.'.php'))
+		{
+			$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.$this->_body.'.php',$this->data,true);
+		}
+		$this->body=str_replace("\r",'',$this->body);
 
 		$has_html=false;
 		if ($this->body!=strip_tags($this->body))
@@ -172,13 +175,26 @@ class CMail
 	{
 		$this->_init($from,$to,$subject,$body);
 
-		$headers="From: ".$this->from."\n"
-			.($this->replyTo?"Reply-To: ".$this->replyTo."\n":"")
+		$from=$this->_encMail($this->from);
+		$to=$this->_encMail($this->to);
+		if (!$from||!$to)
+		{
+			return false;
+		}
+		$replyTo=$this->_encMail($this->replyTo);
+		if ($replyTo===true)
+		{
+			$replyTo=$this->from;
+		}
+		$subject=$this->_encMime($this->subject);
+
+		$headers="From: ".$from."\n"
+			.($replyTo?"Reply-To: ".$replyTo."\n":"")
 			."MIME-Version: 1.0\n"
 			."Content-Type: ".$this->_contentType."\n"
 			."X-Mailer: ".$this->mailer."\n";
 
-		$message=($this->_boundary?'--'.$this->_boundary."\nContent-type: ".$this->_contentTypeBody."\nContent-Transfer-Encoding: 8bit\n\n":'').$this->_iconv(str_replace("\r",'',$this->body))."\n";
+		$message=($this->_boundary?'--'.$this->_boundary."\nContent-type: ".$this->_contentTypeBody."\nContent-Transfer-Encoding: 8bit\n\n":'').$this->_iconv($this->body)."\n";
 
 		$endBound=false;
 		if (count($this->images))
@@ -205,7 +221,7 @@ class CMail
 			$message.="--".$this->_boundary."--";
 		}
 
-		return mail($this->to,$this->subject,$message,$headers);
+		return mail($to,$subject,$message,$headers);
 	}
 
 
@@ -214,11 +230,36 @@ class CMail
 		$message='';
 		foreach ($files as $file)
 		{
-			$filename=basename($file);
-			$ext=pathinfo($file,PATHINFO_EXTENSION);
-			if (array_key_exists($ext,$this->_mimeTypes))
+			$filename=false;
+			$fcontents=false;
+			$content_type=false;
+			if (substr($file,0,1)=='@')
 			{
-				$message.="--".$this->_boundary."\nContent-Type: ".$this->_mimeTypes[$ext].";name=\"".$filename."\"\nContent-Transfer-Encoding: base64\nContent-ID: <".$filename.">\n\n".chunk_split(base64_encode(file_get_contents($file)))."\n";
+				list($_pref,$filename,$fcontents,$content_type)=explode('||',$file);
+			}
+			else
+			{
+				if (file_exists($file))
+				{
+					$filename=trim(basename($file),'/\\');
+					$fcontents=base64_encode(file_get_contents($file));
+				}
+			}
+			if ($filename&&$fcontents)
+			{
+				if (!$content_type)
+				{
+					$ext=pathinfo($filename,PATHINFO_EXTENSION);
+					if (array_key_exists($ext,$this->_mimeTypes))
+					{
+						$content_type=$this->_mimeTypes[$ext];
+					}
+					else
+					{
+						$content_type='application/binary';
+					}
+				}
+				$message.="--".$this->_boundary."\nContent-Type: ".$content_type.";name=\"".$filename."\"\nContent-Transfer-Encoding: base64\nContent-ID: <".$filename.">\n\n".chunk_split($fcontents)."\n";
 			}
 		}
 		return $message;
@@ -227,9 +268,9 @@ class CMail
 
 	private function _iconv($str)
 	{
-		if ($this->charset!='utf-8')
+		if ($this->charset!=$this->defaultCharset)
 		{
-			return iconv('utf-8',$this->charset.'//TRANSLIT',$str);
+			return iconv($this->defaultCharset,$this->charset.'//TRANSLIT',$str);
 		}
 		return $str;
 	}
@@ -241,17 +282,40 @@ class CMail
 	}
 
 
+	private function _($_)
+	{
+		return filter_var($_,FILTER_VALIDATE_EMAIL);
+	}
+
+
 	private function _encMail($mail)
 	{
 		if (is_array($mail))
 		{
-			return $this->_encMime($mail[key($mail)]).' <'.key($mail).'>';
+			if (!($email=$this->_(key($mail))))
+			{
+				return false;
+			}
+			return $this->_encMime($mail[key($mail)]).' <'.$email.'>';
 		}
 		else
 		{
-			return $mail;
+			$tmp=explode('<',$mail);
+			if ($tmp[1])
+			{
+				if (!($email=$this->_(trim($tmp[1],'<>'))))
+				{
+					return false;
+				}
+				return $this->_encMime($tmp[0]).' <'.$email.'>';
+			}
+			else
+			{
+				return $this->_($mail);
+			}
 		}
 	}
+
 
 }
 
