@@ -7,7 +7,7 @@
  * @author Inpassor <inpassor@gmail.com>
  * @link https://github.com/Inpassor/yii-CMail
  *
- * @version 0.1.1 (2014.01.21)
+ * @version 0.1.11 (2015.05.21)
  */
 
 class CMail
@@ -96,7 +96,7 @@ class CMail
 	{
 		if (!$this->mailer)
 		{
-			$this->mailer=Yii::app()->name.' '.Yii::app()->getModule('game')->version;
+			$this->mailer=Yii::app()->name;
 		}
 		$this->viewPath=CHelper::getPath($this->viewPath,'application.views.mail');
 		$this->charset=strtolower($this->charset);
@@ -148,7 +148,7 @@ class CMail
 		}
 		elseif ($has_html&&($has_images||$has_attaches))
 		{
-			$this->_boundary=md5($this->to.time());
+			$this->_boundary=md5((is_array($this->to)?implode('-',$this->to):$this->to).time());
 			$this->_contentType='multipart/related;boundary="'.$this->_boundary.'"';
 			$this->_contentTypeBody='text/html;charset="'.$this->charset.'"';
 		}
@@ -158,7 +158,7 @@ class CMail
 		}
 		elseif (!$has_html&&($has_images||$has_attaches))
 		{
-			$this->_boundary=md5($this->to.time());
+			$this->_boundary=md5((is_array($this->to)?implode('-',$this->to):$this->to).time());
 			$this->_contentType='multipart/related;boundary="'.$this->_boundary.'"';
 			$this->_contentTypeBody='text/plain;charset="'.$this->charset.'"';
 		}
@@ -176,7 +176,19 @@ class CMail
 		$this->_init($from,$to,$subject,$body);
 
 		$from=$this->_encMail($this->from);
-		$to=$this->_encMail($this->to);
+		if (is_array($this->to))
+		{
+			$to=array();
+			foreach ($this->to as $_to)
+			{
+				$to[]=$this->_encMail($_to);
+			}
+			$to=implode(', ',$to);
+		}
+		else
+		{
+			$to=$this->_encMail($this->to);
+		}
 		if (!$from||!$to)
 		{
 			return false;
@@ -290,32 +302,20 @@ class CMail
 
 	private function _encMail($mail)
 	{
-		if (is_array($mail))
+		$tmp=explode('<',$mail);
+		if (count($tmp)>=2)
 		{
-			if (!($email=$this->_(key($mail))))
+			if (!($email=$this->_(trim($tmp[1],'<>'))))
 			{
 				return false;
 			}
-			return $this->_encMime($mail[key($mail)]).' <'.$email.'>';
+			return $this->_encMime($tmp[0]).' <'.$email.'>';
 		}
 		else
 		{
-			$tmp=explode('<',$mail);
-			if ($tmp[1])
-			{
-				if (!($email=$this->_(trim($tmp[1],'<>'))))
-				{
-					return false;
-				}
-				return $this->_encMime($tmp[0]).' <'.$email.'>';
-			}
-			else
-			{
-				return $this->_($mail);
-			}
+			return $this->_($mail);
 		}
 	}
-
 
 }
 
