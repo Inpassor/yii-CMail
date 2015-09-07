@@ -1,13 +1,12 @@
 <?php
 /**
  * CMail class file.
+ * @version 0.1.2 (2015.09.07)
  *
  * Simple mailer
  *
  * @author Inpassor <inpassor@gmail.com>
  * @link https://github.com/Inpassor/yii-CMail
- *
- * @version 0.1.11 (2015.05.21)
  */
 
 class CMail
@@ -25,7 +24,6 @@ class CMail
 	public $attaches=array();
 	public $data=array();
 
-	private $_body=null;
 	private $_contentType=null;
 	private $_contentTypeBody=null;
 	private $_boundary=null;
@@ -91,14 +89,13 @@ class CMail
 		'zip' =>'application/zip',
 	);
 
-
 	private function _init($from,$to,$subject,$body)
 	{
 		if (!$this->mailer)
 		{
 			$this->mailer=Yii::app()->name;
 		}
-		$this->viewPath=CHelper::getPath($this->viewPath,'application.views.mail');
+		$this->viewPath=($dir=Yii::getPathOfAlias($this->viewPath))?$dir:Yii::app()->viewPath;
 		$this->charset=strtolower($this->charset);
 		if ($from)
 		{
@@ -116,32 +113,25 @@ class CMail
 		{
 			$this->body=$body;
 		}
-		if (file_exists($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->body.'.php'))
-		{
-			$this->_body=$this->body;
-		}
-		elseif (file_exists($this->viewPath.DIRECTORY_SEPARATOR.$this->body.'.php'))
-		{
-			$this->_body=$this->body;
-		}
-		if (file_exists($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->_body.'.php'))
-		{
-			$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->_body.'.php',$this->data,true);
-		}
-		elseif (file_exists($this->viewPath.DIRECTORY_SEPARATOR.$this->_body.'.php'))
-		{
-			$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.$this->_body.'.php',$this->data,true);
-		}
-		$this->body=str_replace("\r",'',$this->body);
-
 		$has_html=false;
-		if ($this->body!=strip_tags($this->body))
+		if ($this->body)
 		{
-			$has_html=true;
+			if (strlen($this->body)<256)
+			{
+				if (file_exists($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->body.'.php'))
+				{
+					$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.Yii::app()->language.DIRECTORY_SEPARATOR.$this->body.'.php',$this->data,true);
+				}
+				elseif (file_exists($this->viewPath.DIRECTORY_SEPARATOR.$this->body.'.php'))
+				{
+					$this->body=Yii::app()->controller->renderFile($this->viewPath.DIRECTORY_SEPARATOR.$this->body.'.php',$this->data,true);
+				}
+			}
+			$this->body=str_replace("\r",'',$this->body);
+			$has_html=$this->body!=strip_tags($this->body);
 		}
 		$has_images=count($this->images);
 		$has_attaches=count($this->attaches);
-
 		if ($has_html&&!$has_images&&!$has_attaches)
 		{
 			$this->_contentType='text/html;charset="'.$this->charset.'"';
@@ -164,17 +154,14 @@ class CMail
 		}
 	}
 
-
 	public function __construct($from='',$to='',$subject='',$body='')
 	{
 		$this->_init($from,$to,$subject,$body);
 	}
 
-
 	public function send($from='',$to='',$subject='',$body='')
 	{
 		$this->_init($from,$to,$subject,$body);
-
 		$from=$this->_encMail($this->from);
 		if (is_array($this->to))
 		{
@@ -199,7 +186,6 @@ class CMail
 			$replyTo=$this->from;
 		}
 		$subject=$this->_encMime($this->subject);
-
 		$headers="From: ".$from."\n"
 			.($replyTo?"Reply-To: ".$replyTo."\n":"")
 			."MIME-Version: 1.0\n"
@@ -207,7 +193,6 @@ class CMail
 			."X-Mailer: ".$this->mailer."\n";
 
 		$message=($this->_boundary?'--'.$this->_boundary."\nContent-type: ".$this->_contentTypeBody."\nContent-Transfer-Encoding: 8bit\n\n":'').$this->_iconv($this->body)."\n";
-
 		$endBound=false;
 		if (count($this->images))
 		{
@@ -227,15 +212,12 @@ class CMail
 				$message.=($endBound?'':"\n").$mes;
 			}
 		}
-
 		if ($endBound)
 		{
 			$message.="--".$this->_boundary."--";
 		}
-
 		return mail($to,$subject,$message,$headers);
 	}
-
 
 	private function _attach($files)
 	{
@@ -277,7 +259,6 @@ class CMail
 		return $message;
 	}
 
-
 	private function _iconv($str)
 	{
 		if ($this->charset!=$this->defaultCharset)
@@ -287,18 +268,15 @@ class CMail
 		return $str;
 	}
 
-
 	private function _encMime($str)
 	{
 		return '=?'.$this->charset.'?B?'.base64_encode($this->_iconv($str)).'?=';
 	}
 
-
 	private function _($_)
 	{
 		return filter_var($_,FILTER_VALIDATE_EMAIL);
 	}
-
 
 	private function _encMail($mail)
 	{
